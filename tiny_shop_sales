@@ -1,0 +1,137 @@
+This is my presentation for the Tiny shop sales challenge from Data in Motion, LLC.
+--1) Which product has the highest price? Only return a single row.
+SELECT TOP 1 
+	product_name
+FROM 
+	products
+ORDER BY 
+	price DESC;
+
+--2) Which customer has made the most orders?
+SELECT 
+	 c.first_name + ' ' + c.last_name AS customer_name, COUNT(o.order_id) AS total_orders
+FROM orders o
+LEFT JOIN customers c
+ON  c.customer_id = o.customer_id
+GROUP BY 
+	c.first_name + ' ' + c.last_name 
+ORDER BY 
+	total_orders DESC
+;
+
+--3) What’s the total revenue per product?
+SELECT  
+	p.product_id, p.product_name, SUM(oi.quantity * p.price) AS total_revenue
+FROM 
+	products p
+LEFT JOIN order_items oi 
+ON  p.product_id = oi.product_id
+GROUP BY 
+	p.product_name, p.product_id
+ORDER BY 
+	total_revenue DESC
+;
+
+--4) Find the day with the highest revenue.
+WITH revenue AS (	
+	SELECT 
+		o.order_date, 
+		SUM(oi.quantity * p.price) AS total_revenue
+	FROM 
+		order_items oi
+	JOIN products p
+	ON  oi.product_id = p.product_id
+	JOIN orders o 
+	ON  oi.order_id = o.order_id
+	GROUP BY 
+		o.order_date
+)
+SELECT  
+	order_date, total_revenue
+FROM
+	revenue
+ORDER BY 2 DESC
+;
+
+--5) Find the first order (by date) for each customer.
+WITH fist_order AS (
+	SELECT
+		c.customer_id,
+		CONCAT(c.first_name, ' ',c.last_name) AS customer,
+		o.order_date,
+		RANK () over (PARTITION BY c.customer_id ORDER BY o.order_date) rn
+	FROM 
+		customers c
+	LEFT JOIN orders o
+	ON  c.customer_id = o.customer_id
+	GROUP BY 
+		c.customer_id, CONCAT(c.first_name, ' ',c.last_name), o.order_date
+)
+SELECT 
+	customer, order_date
+FROM 
+	fist_order
+WHERE 
+	rn = 1
+;
+
+--6) Find the top 3 customers who have ordered the most distinct products
+
+WITH cte_prod AS (
+	SELECT 
+		o.customer_id,
+		COUNT(DISTINCT oi.product_id) AS distinct_products
+	FROM 
+		orders o
+	LEFT JOIN order_items oi
+	ON o.order_id = oi.order_id
+	LEFT JOIN customers c
+	ON o.customer_id = c.customer_id
+	GROUP BY 
+		o.customer_id
+)
+SELECT TOP 3
+	CONCAT(c.first_name, ' ',c.last_name) AS customer_name,
+	distinct_products,
+	c.customer_id
+FROM 
+	customers c, cte_prod
+ORDER BY
+	distinct_products DESC
+;
+
+--7) Which product has been bought the least in terms of quantity?
+SELECT 
+	p.product_name,
+	SUM(oi.quantity) AS total_bought,
+	COUNT(oi.order_id) AS no_orders
+FROM 
+	order_items oi
+INNER JOIN products p
+ON oi.product_id = p.product_id
+GROUP BY 
+	p.product_name
+ORDER BY 
+	total_bought
+;
+
+--8) What is the median order total?
+
+WITH total_order AS (
+	SELECT 
+		o.order_id, 
+		SUM(oi.quantity * p.price) AS revenue
+	FROM 
+		orders o 
+	INNER JOIN order_items oi
+	ON o.order_id = oi.order_id
+	INNER JOIN products p
+	ON p.product_id = oi.product_id
+	GROUP BY 
+		o.order_id)
+SELECT 
+	CAST (ROUND(AVG(revenue),2,1) AS DECIMAL (20,2)) AS median_order_total
+FROM 
+	total_order;
+
+--9) For each order, determine if it was ‘Expensive’ (total over 300), ‘Affordable’ (total over 100), or ‘Cheap’.
